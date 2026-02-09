@@ -201,11 +201,30 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase Configuration
-        const firebaseConfig = JSON.parse(window.__firebase_config);
-        const app = initializeApp(firebaseConfig);
+        // Your specific Firebase configuration for Standalone Deployment (Vercel)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDhZPlDPcM_3nbrNDKBbK8gUxJ2b9xwBog",
+            authDomain: "deepwork-9ce83.firebaseapp.com",
+            projectId: "deepwork-9ce83",
+            storageBucket: "deepwork-9ce83.firebasestorage.app",
+            messagingSenderId: "551430462302",
+            appId: "1:551430462302:web:847c015656cf35abd38dcf",
+            measurementId: "G-P9FS2D5C4L"
+        };
+
+        // If running in internal preview, try to use environment config
+        let finalConfig = firebaseConfig;
+        if (typeof window.__firebase_config !== 'undefined') {
+            try {
+                finalConfig = JSON.parse(window.__firebase_config);
+            } catch(e) {}
+        }
+
+        const app = initializeApp(finalConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        
+        // App ID logic
         const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'bandwidth-library-archive';
 
         let currentUser = null;
