@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Bandwidth Library Archive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --journal-bg: #fdfdfb;
+            --journal-border: #e8e8e3;
+            --accent-color: #1a1a1a;
+            --text-main: #1c1c1c;
+            --text-muted: #82827c;
+        }
+
+        body {
+            background-color: var(--journal-bg);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3, .serif {
+            font-family: 'Libre Baskerville', serif;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .archive-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .study-entry {
+            background: white;
+            border: 1px solid var(--journal-border);
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .study-entry:focus-within {
+            border-color: var(--accent-color);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+        }
+
+        textarea {
+            background: transparent;
+            line-height: 1.7;
+            resize: none;
+            border: none;
+            width: 100%;
+            font-style: italic;
+        }
+
+        textarea:focus {
+            outline: none;
+        }
+
+        .img-container {
+            filter: grayscale(10%);
+            transition: filter 0.5s ease;
+        }
+
+        .img-container:hover {
+            filter: grayscale(0%);
+        }
+
+        .tab-active {
+            border-bottom: 2px solid var(--accent-color);
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--journal-bg); }
+        ::-webkit-scrollbar-thumb { background: #dcdcd8; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #b0b0ac; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .entry-anim { animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+        /* Modal Backdrop */
+        .modal-overlay {
+            background: rgba(253, 253, 251, 0.9);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+        }
+        
+        .sync-pulse {
+            animation: sync-pulse 1.5s infinite;
+        }
+        @keyframes sync-pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen px-6 py-12 md:px-12">
+    <div class="archive-container">
+        <!-- Masthead -->
+        <header class="border-b border-stone-200 pb-12 mb-16 relative">
+            <div class="flex flex-col md:flex-row justify-between items-baseline gap-4">
+                <div>
+                    <p class="mono text-[10px] uppercase tracking-[0.4em] text-stone-400 mb-3">Cloud Integrated Strategic Review // Active Sync</p>
+                    <h1 class="text-5xl md:text-7xl font-bold tracking-tight">Library Archive</h1>
+                </div>
+                <div class="text-right">
+                    <div id="clock" class="mono text-sm font-medium text-stone-500 mb-1">00:00:00</div>
+                    <div id="sync-status" class="mono text-[9px] text-stone-300 flex items-center justify-end gap-2">
+                        <i class="fa-solid fa-cloud"></i> <span>INITIALIZING...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs & Add Action -->
+            <div class="flex flex-col md:flex-row justify-between items-center mt-16 gap-6">
+                <nav class="flex gap-10 mono text-[11px] uppercase tracking-widest text-stone-400">
+                    <button onclick="switchTab('movies')" id="btn-movies" class="pb-2 tab-active transition-all">I. Cinematic Studies</button>
+                    <button onclick="switchTab('books')" id="btn-books" class="pb-2 transition-all hover:text-stone-600">II. Foundational Texts</button>
+                </nav>
+                <button onclick="toggleModal(true)" class="mono text-[10px] uppercase tracking-[0.2em] px-6 py-2 border border-stone-200 hover:border-black transition-all rounded-sm flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-[8px]"></i> Manual Entry
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Entry Grid -->
+        <main id="archive-grid" class="grid grid-cols-1 md:grid-cols-2 gap-12 mb-24">
+            <div class="col-span-full py-20 text-center mono text-stone-300 animate-pulse uppercase tracking-[0.2em]">
+                Authenticating Vault Access...
+            </div>
+        </main>
+
+        <!-- Stats Overlay (Sticky Bottom) -->
+        <div class="fixed bottom-8 right-8 z-50">
+            <div class="bg-white border border-stone-200 p-6 rounded-lg shadow-xl flex items-center gap-8">
+                <div class="text-center border-r border-stone-100 pr-8">
+                    <p class="mono text-[9px] uppercase text-stone-400 mb-1">Synthesized</p>
+                    <p id="stat-count" class="serif text-2xl font-bold">0</p>
+                </div>
+                <div class="text-center">
+                    <p class="mono text-[9px] uppercase text-stone-400 mb-1">Total Vault</p>
+                    <p id="stat-total" class="serif text-2xl font-bold">50</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Modal -->
+        <div id="add-modal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center p-6">
+            <div class="bg-white border border-stone-200 w-full max-w-md p-10 rounded-sm shadow-2xl relative">
+                <button onclick="toggleModal(false)" class="absolute top-6 right-6 text-stone-300 hover:text-black">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+                <h2 class="serif text-3xl mb-8 italic">Manual Entry</h2>
+                <form id="entry-form" class="space-y-6">
+                    <div>
+                        <label class="mono text-[10px] uppercase text-stone-400 block mb-2">Category</label>
+                        <select id="new-type" class="w-full bg-stone-50 border border-stone-100 p-3 rounded-sm text-sm mono focus:outline-none">
+                            <option value="movies">Cinematic Study</option>
+                            <option value="books">Foundational Text</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mono text-[10px] uppercase text-stone-400 block mb-2">Title</label>
+                        <input id="new-title" type="text" required class="w-full bg-stone-50 border border-stone-100 p-3 rounded-sm text-sm focus:outline-none focus:border-black" placeholder="Archive Reference">
+                    </div>
+                    <div>
+                        <label class="mono text-[10px] uppercase text-stone-400 block mb-2">Key Theme</label>
+                        <input id="new-theme" type="text" required class="w-full bg-stone-50 border border-stone-100 p-3 rounded-sm text-sm focus:outline-none focus:border-black" placeholder="Strategic Narrative">
+                    </div>
+                    <div>
+                        <label class="mono text-[10px] uppercase text-stone-400 block mb-2">Visual URL</label>
+                        <input id="new-img" type="url" class="w-full bg-stone-50 border border-stone-100 p-3 rounded-sm text-sm focus:outline-none focus:border-black" placeholder="https://...">
+                    </div>
+                    <button type="submit" class="w-full bg-black text-white py-4 text-xs mono uppercase tracking-widest hover:bg-stone-800 transition-all rounded-sm shadow-lg">
+                        Confirm Indexing
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-32 pt-12 border-t border-stone-200 flex flex-col md:flex-row justify-between items-center gap-6 mono text-[10px] text-stone-400 uppercase tracking-widest pb-12">
+            <div>The High-Bandwidth Archive // Cloud Persistence v6</div>
+            <div id="user-id">ID: ---</div>
+            <div class="italic">Encrypted Session // Permanent Index</div>
+        </footer>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration
+        const firebaseConfig = JSON.parse(window.__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'bandwidth-library-archive';
+
+        let currentUser = null;
+        let userData = {
+            notes: {},
+            customMovies: [],
+            customBooks: []
+        };
+        let activeType = 'movies';
+
+        // Core Dataset
+        const baseLibraryData = {
+            movies: [
+                { title: "Whiplash", img: "https://upload.wikimedia.org/wikipedia/en/0/01/Whiplash_poster.jpg", theme: "Identity, Drive, Inner Conflict" },
+                { title: "Black Swan", img: "https://upload.wikimedia.org/wikipedia/en/6/68/Black_Swan_poster.jpg", theme: "Obsession & Perfection" },
+                { title: "Nightcrawler", img: "https://upload.wikimedia.org/wikipedia/en/d/d4/Nightcrawlerfilm.jpg", theme: "Ethics & Ambition" },
+                { title: "Joker", img: "https://upload.wikimedia.org/wikipedia/en/e/e1/Joker_%282019_film%29_poster.jpg", theme: "Societal Breakdown" },
+                { title: "The Pursuit of Happyness", img: "https://upload.wikimedia.org/wikipedia/en/8/81/Poster-pursuithappyness.jpg", theme: "Resilience" },
+                { title: "The Social Network", img: "https://upload.wikimedia.org/wikipedia/ca/7/7a/Social_network_film_poster.jpg", theme: "Systems & Power" },
+                { title: "Moneyball", img: "https://upload.wikimedia.org/wikipedia/en/2/2e/Moneyball_Poster.jpg", theme: "Strategy & Data" },
+                { title: "The Big Short", img: "https://upload.wikimedia.org/wikipedia/uk/c/c5/The_Big_Short_poster.jpg", theme: "Economic Systems" },
+                { title: "The Founder", img: "https://upload.wikimedia.org/wikipedia/en/c/c3/The_Founder_poster.jpg", theme: "Expansion & Leverage" },
+                { title: "Margin Call", img: "https://upload.wikimedia.org/wikipedia/en/6/62/Margin_Call.jpg", theme: "Risk Management" },
+                { title: "Get Out", img: "https://upload.wikimedia.org/wikipedia/zh/6/60/Get_Out_Poster.jpg", theme: "Perception & Psychology" },
+                { title: "Gone Girl", img: "https://upload.wikimedia.org/wikipedia/en/0/05/Gone_Girl_Poster.jpg", theme: "Manipulation" },
+                { title: "Shutter Island", img: "https://upload.wikimedia.org/wikipedia/en/7/76/Shutterislandposter.jpg", theme: "Mental Architecture" },
+                { title: "Prisoners", img: "https://upload.wikimedia.org/wikipedia/en/6/63/Prisoners2013Poster.jpg", theme: "Conflict & Morality" },
+                { title: "No Country for Old Men", img: "https://upload.wikimedia.org/wikipedia/en/8/8b/No_Country_for_Old_Men_poster.jpg", theme: "Fate & Decision" },
+                { title: "Ex Machina", img: "https://upload.wikimedia.org/wikipedia/en/b/ba/Ex_Machina_poster.png", theme: "AI Consciousness" },
+                { title: "Her", img: "https://upload.wikimedia.org/wikipedia/en/4/44/Her2013Poster.jpg", theme: "Emotional Tech" },
+                { title: "Arrival", img: "https://upload.wikimedia.org/wikipedia/en/d/df/Arrival%2C_Movie_Poster.jpg", theme: "Language & Communication" },
+                { title: "Interstellar", img: "https://upload.wikimedia.org/wikipedia/en/b/bc/Interstellar_film_poster.jpg", theme: "Universal Scale" },
+                { title: "Children of Men", img: "https://upload.wikimedia.org/wikipedia/en/e/e8/Children_of_men_poster.jpg", theme: "Dystopian Systems" },
+                { title: "Inception", img: "https://upload.wikimedia.org/wikipedia/en/2/2e/Inception_%282010%29_theatrical_poster.jpg", theme: "Subconscious Design" },
+                { title: "Blade Runner 2049", img: "https://upload.wikimedia.org/wikipedia/en/9/9b/Blade_Runner_2049_poster.png", theme: "Memory & Reality" },
+                { title: "Dune: Part One", img: "https://upload.wikimedia.org/wikipedia/en/8/8e/Dune_%282021_film%29_poster.jpg", theme: "Imperial Strategy" },
+                { title: "Dune: Part Two", img: "https://upload.wikimedia.org/wikipedia/en/5/52/Dune_Part_Two_poster.jpeg", theme: "Power & Prophecy" },
+                { title: "Tenet", img: "https://upload.wikimedia.org/wikipedia/en/1/14/Tenet_movie_poster.jpg", theme: "Temporal Mechanics" }
+            ],
+            books: [
+                { title: "Thinking, Fast and Slow", img: "https://upload.wikimedia.org/wikipedia/en/c/c1/Thinking%2C_Fast_and_Slow_cover.jpg", theme: "Cognitive Bias" },
+                { title: "Thinking in Bets", img: "https://covers.openlibrary.org/b/id/8389369-L.jpg", theme: "Decision Making" },
+                { title: "The Black Swan", img: "https://upload.wikimedia.org/wikipedia/en/c/c4/Black_swan_taleb.jpg", theme: "Unpredictability" },
+                { title: "Antifragile", img: "https://upload.wikimedia.org/wikipedia/en/c/c5/Antifragile_cover.jpg", theme: "Systems Resilience" },
+                { title: "Skin in the Game", img: "https://upload.wikimedia.org/wikipedia/en/4/4c/Skin_in_the_Game_%28book%29.jpg", theme: "Asymmetry & Risk" },
+                { title: "The Almanack of Naval Ravikant", img: "https://covers.openlibrary.org/b/id/11186790-L.jpg", theme: "Wealth & Leverage" },
+                { title: "Good Strategy Bad Strategy", img: "https://covers.openlibrary.org/b/id/15104767-L.jpg", theme: "Execution Logic" },
+                { title: "Zero to One", img: "https://upload.wikimedia.org/wikipedia/en/4/44/Zero_to_One.jpg", theme: "Monopoly & Innovation" },
+                { title: "Principles", img: "https://upload.wikimedia.org/wikipedia/en/1/1c/Principles_%28book%29.jpg", theme: "Life & Work Systems" },
+                { title: "The 48 Laws of Power", img: "https://upload.wikimedia.org/wikipedia/en/b/bc/GreeneRobert-48LawsOfPower.jpg", theme: "Strategic Influence" },
+                { title: "Influence", img: "https://covers.openlibrary.org/b/id/47633-L.jpg", theme: "Psychology of Persuasion" },
+                { title: "Predictably Irrational", img: "https://upload.wikimedia.org/wikipedia/en/0/0f/Predictably_Irrational_Book_Cover.jpg", theme: "Economic Behavior" },
+                { title: "Games People Play", img: "https://upload.wikimedia.org/wikipedia/en/e/e7/GamesPeoplePlay.jpg", theme: "Transactional Analysis" },
+                { title: "The Elephant in the Brain", img: "https://upload.wikimedia.org/wikipedia/en/3/3b/The_Elephant_in_the_Brain.jpg", theme: "Hidden Motives" },
+                { title: "The Denial of Death", img: "https://upload.wikimedia.org/wikipedia/en/b/bb/The_Denial_of_Death,_first_edition.jpg", theme: "Human Motivation" },
+                { title: "Deep Work", img: "https://covers.openlibrary.org/b/id/14859612-L.jpg", theme: "Focused Craft" },
+                { title: "The War of Art", img: "https://upload.wikimedia.org/wikipedia/en/e/ea/War_of_Art.jpg", theme: "Creative Resistance" },
+                { title: "Range", img: "https://covers.openlibrary.org/b/id/8750800-L.jpg", theme: "Generalist Success" },
+                { title: "Flow", img: "https://covers.openlibrary.org/b/id/11109153-L.jpg", theme: "Optimal Experience" },
+                { title: "Show Your Work", img: "https://covers.openlibrary.org/b/id/8301138-L.jpg", theme: "Creative Transparency" },
+                { title: "Life 3.0", img: "https://upload.wikimedia.org/wikipedia/en/e/eb/Life_3.0_book_cover.jpg", theme: "The AI Future" },
+                { title: "Superintelligence", img: "https://upload.wikimedia.org/wikipedia/en/a/a2/Superintelligence_Bostrom.jpg", theme: "Paths & Dangers" },
+                { title: "Sapiens", img: "https://upload.wikimedia.org/wikipedia/en/0/06/Sapiens_A_Brief_History_of_Humankind.jpg", theme: "Human Origins" },
+                { title: "Homo Deus", img: "https://upload.wikimedia.org/wikipedia/en/5/5b/Homo_Deus_-_A_Brief_History_of_Tomorrow.jpg", theme: "Human Future" },
+                { title: "The Fourth Turning", img: "https://covers.openlibrary.org/b/id/8364731-L.jpg", theme: "Historical Cycles" }
+            ]
+        };
+
+        window.switchTab = (type) => {
+            activeType = type;
+            document.getElementById('btn-movies').className = type === 'movies' ? 'pb-2 tab-active transition-all' : 'pb-2 transition-all hover:text-stone-600';
+            document.getElementById('btn-books').className = type === 'books' ? 'pb-2 tab-active transition-all' : 'pb-2 transition-all hover:text-stone-600';
+            renderArchive();
+        };
+
+        window.toggleModal = (show) => {
+            document.getElementById('add-modal').classList.toggle('hidden', !show);
+            if (!show) document.getElementById('entry-form').reset();
+        };
+
+        // Initialize App
+        async function init() {
+            // Auth Flow
+            try {
+                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                    await signInWithCustomToken(auth, window.__initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth initiation failed", err);
+                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i> OFFLINE';
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('user-id').textContent = `ID: ${user.uid.slice(0, 8)}`;
+                    setupDataListener(user.uid);
+                }
+            });
+
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            // Manual Entry Submission
+            document.getElementById('entry-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const type = document.getElementById('new-type').value;
+                const newItem = {
+                    title: document.getElementById('new-title').value,
+                    theme: document.getElementById('new-theme').value,
+                    img: document.getElementById('new-img').value || 'https://via.placeholder.com/400x600?text=Reference'
+                };
+
+                if (type === 'movies') userData.customMovies.push(newItem);
+                else userData.customBooks.push(newItem);
+
+                await syncToVault();
+                toggleModal(false);
+                renderArchive();
+            };
+        }
+
+        // Firestore Listener
+        function setupDataListener(uid) {
+            if (!uid) return;
+            const userDoc = doc(db, 'artifacts', appId, 'users', uid, 'data', 'library_state');
+            
+            onSnapshot(userDoc, (snapshot) => {
+                if (snapshot.exists()) {
+                    userData = snapshot.data();
+                    // Ensure arrays exist
+                    if (!userData.notes) userData.notes = {};
+                    if (!userData.customMovies) userData.customMovies = [];
+                    if (!userData.customBooks) userData.customBooks = [];
+                } else {
+                    // Initialize empty vault
+                    userData = { notes: {}, customMovies: [], customBooks: [] };
+                }
+                
+                renderArchive();
+                updateStats();
+                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-cloud-check text-green-500"></i> <span>VAULT SYNCED</span>';
+            }, (err) => {
+                console.error("Snapshot error:", err);
+                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-orange-400"></i> SYNC ERROR';
+            });
+        }
+
+        // Persistence Logic
+        async function syncToVault() {
+            if (!currentUser) return;
+            try {
+                const userDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'library_state');
+                await setDoc(userDoc, userData, { merge: true });
+                updateStats();
+            } catch (err) {
+                console.error("Critical Sync Failure:", err);
+            }
+        }
+
+        // Smooth Note Handling
+        let debounceTimeout;
+        window.updateNote = (title, value) => {
+            // Immediate local update for "smoothness"
+            userData.notes[title] = value;
+            
+            const statusEl = document.getElementById('sync-status');
+            statusEl.innerHTML = '<i class="fa-solid fa-rotate fa-spin text-stone-300"></i> <span class="sync-pulse">DRAFTING...</span>';
+            
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(async () => {
+                await syncToVault();
+                statusEl.innerHTML = '<i class="fa-solid fa-cloud-check text-green-500"></i> <span>VAULT SYNCED</span>';
+            }, 1000);
+        };
+
+        // UI Rendering
+        function renderArchive() {
+            const grid = document.getElementById('archive-grid');
+            grid.innerHTML = '';
+            
+            const base = baseLibraryData[activeType];
+            const custom = activeType === 'movies' ? userData.customMovies : userData.customBooks;
+            const fullList = [...base, ...custom];
+            
+            if (fullList.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-20 text-center mono text-stone-200 uppercase tracking-widest">No entries found in this category</div>`;
+                return;
+            }
+
+            fullList.forEach((item, index) => {
+                const entry = document.createElement('div');
+                entry.className = `study-entry p-8 flex flex-col gap-6 entry-anim`;
+                entry.style.animationDelay = `${index * 0.05}s`;
+                
+                const currentNote = userData.notes[item.title] || '';
+
+                entry.innerHTML = `
+                    <div class="flex gap-6 border-b border-stone-100 pb-6 relative">
+                        <div class="w-32 h-44 flex-shrink-0 bg-stone-100 rounded-sm overflow-hidden img-container shadow-sm">
+                            <img src="${item.img}" class="w-full h-full object-cover" alt="${item.title}" onerror="this.src='https://via.placeholder.com/400x600?text=Reference'">
+                        </div>
+                        <div class="flex flex-col justify-between py-1 flex-grow">
+                            <div>
+                                <h3 class="serif text-2xl font-bold leading-tight mb-2">${item.title}</h3>
+                                <p class="mono text-[10px] text-stone-400 uppercase tracking-widest">${item.theme}</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="mono text-[9px] px-2 py-0.5 border border-stone-200 text-stone-400 rounded-full">Ref. ${index + 1}</span>
+                                ${index >= base.length ? '<span class="mono text-[8px] px-2 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-100">Custom Entry</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="mono text-[9px] uppercase tracking-widest text-stone-500 font-bold">Reflections & Synthesis</label>
+                            <i class="fa-solid fa-feather-pointed text-[10px] text-stone-200"></i>
+                        </div>
+                        <textarea 
+                            class="text-lg text-stone-600 placeholder:text-stone-100"
+                            placeholder="Distill observations for this entry..."
+                            oninput="updateNote('${item.title.replace(/'/g, "\\'")}', this.value)"
+                            rows="5"
+                        >${currentNote}</textarea>
+                    </div>
+                `;
+                grid.appendChild(entry);
+            });
+
+            document.getElementById('stat-total').textContent = fullList.length;
+        }
+
+        function updateStats() {
+            const count = Object.values(userData.notes).filter(v => v && v.trim().length > 0).length;
+            document.getElementById('stat-count').textContent = count;
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+        }
+
+        init();
+    </script>
+</body>
+</html>
