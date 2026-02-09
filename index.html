@@ -190,7 +190,7 @@
 
         <!-- Footer -->
         <footer class="mt-32 pt-12 border-t border-stone-200 flex flex-col md:flex-row justify-between items-center gap-6 mono text-[10px] text-stone-400 uppercase tracking-widest pb-12">
-            <div>The High-Bandwidth Archive // Cloud Persistence v6.1</div>
+            <div>The High-Bandwidth Archive // Cloud Persistence v6.3</div>
             <div id="user-id">ID: ---</div>
             <div class="italic">Encrypted Session // Permanent Index</div>
         </footer>
@@ -224,6 +224,7 @@
             notes: {},
             customMovies: [],
             customBooks: [],
+            hiddenTitles: [], // Track deleted base items
             lastUpdate: 0
         };
         let activeType = 'movies';
@@ -307,7 +308,7 @@
 
         // Initialize App
         async function init() {
-            // Auth Flow - Rule 3 Compliant: Await Auth First
+            // Rule 3: Auth First
             const initAuth = async () => {
                 try {
                     if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
@@ -327,6 +328,7 @@
                 if (user) {
                     currentUser = user;
                     document.getElementById('user-id').textContent = `ID: ${user.uid.slice(0, 8)}`;
+                    // Guard: Only start Firestore logic after auth is confirmed
                     setupDataListener(user.uid);
                 }
             });
@@ -355,28 +357,29 @@
             };
         }
 
-        // Firestore Listener - Follows Mandatory Rule 1 (Path Structure)
+        // Firestore Listener - Strictly Rule 1 (Path)
         function setupDataListener(uid) {
-            if (!uid) return;
-            // RULE 1 COMPLIANT PATH: 6 segments for document access
+            if (!uid || !currentUser) return;
+            
+            // RULE 1 COMPLIANT PATH: /artifacts/{appId}/users/{userId}/{collectionName}
             const userDoc = doc(db, 'artifacts', appId, 'users', uid, 'vault', 'state');
             
             onSnapshot(userDoc, (snapshot) => {
                 if (snapshot.exists()) {
                     const serverData = snapshot.data();
                     
-                    // Conflict Resolution: Only update if server has strictly newer information
-                    // AND we haven't made a local change in the last 2.5 seconds (to avoid jumping while typing)
+                    // Conflict Resolution
                     const now = Date.now();
-                    const isDrafting = (now - userData.lastUpdate) < 2500;
+                    const recentlyUpdatedLocally = (now - userData.lastUpdate) < 3000;
                     
-                    if (serverData.lastUpdate > userData.lastUpdate && !isDrafting) {
+                    if (serverData.lastUpdate > userData.lastUpdate && !recentlyUpdatedLocally) {
                         userData = {
                             ...userData,
                             ...serverData,
                             notes: { ...userData.notes, ...serverData.notes },
                             customMovies: serverData.customMovies || userData.customMovies,
                             customBooks: serverData.customBooks || userData.customBooks,
+                            hiddenTitles: serverData.hiddenTitles || userData.hiddenTitles || [],
                             lastUpdate: serverData.lastUpdate
                         };
                         saveLocal();
@@ -386,8 +389,7 @@
                 }
                 document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-cloud-check text-green-500"></i> <span>VAULT SYNCED</span>';
             }, (err) => {
-                console.error("Snapshot error (Check Security Rules):", err);
-                // If permission denied, the app remains functional in Local Cache mode
+                console.error("Snapshot error:", err);
                 document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-orange-400"></i> LOCAL ONLY';
             });
         }
@@ -397,7 +399,6 @@
         }
 
         async function syncToVault() {
-            // Guard: Rule 3
             if (!currentUser) return;
             try {
                 const userDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'vault', 'state');
@@ -425,13 +426,39 @@
             }, 1200);
         }
 
-        // UI Rendering with event binding
+        // Delete Logic
+        window.deleteEntry = async (title, isCustom) => {
+            // Update timestamp to ensure server reflects this specific deletion
+            userData.lastUpdate = Date.now();
+
+            if (isCustom) {
+                if (activeType === 'movies') {
+                    userData.customMovies = userData.customMovies.filter(m => m.title !== title);
+                } else {
+                    userData.customBooks = userData.customBooks.filter(b => b.title !== title);
+                }
+            } else {
+                if (!userData.hiddenTitles) userData.hiddenTitles = [];
+                if (!userData.hiddenTitles.includes(title)) {
+                    userData.hiddenTitles.push(title);
+                }
+            }
+
+            saveLocal();
+            renderArchive();
+            await syncToVault();
+        };
+
+        // UI Rendering
         function renderArchive() {
             const grid = document.getElementById('archive-grid');
             if (!grid) return;
             grid.innerHTML = '';
             
-            const base = baseLibraryData[activeType];
+            const baseRaw = baseLibraryData[activeType];
+            const hidden = userData.hiddenTitles || [];
+            const base = baseRaw.filter(item => !hidden.includes(item.title));
+            
             const custom = activeType === 'movies' ? (userData.customMovies || []) : (userData.customBooks || []);
             const fullList = [...base, ...custom];
             
@@ -446,9 +473,16 @@
                 entry.style.animationDelay = `${index * 0.05}s`;
                 
                 const currentNote = userData.notes[item.title] || '';
+                const isCustom = index >= base.length;
 
                 entry.innerHTML = `
                     <div class="flex gap-6 border-b border-stone-100 pb-6 relative">
+                        <!-- Delete Button -->
+                        <button class="absolute top-0 right-0 text-stone-200 hover:text-red-400 transition-all p-1 delete-btn" 
+                                title="Remove from Archive">
+                            <i class="fa-solid fa-trash-can text-[10px]"></i>
+                        </button>
+
                         <div class="w-32 h-44 flex-shrink-0 bg-stone-100 rounded-sm overflow-hidden img-container shadow-sm">
                             <img src="${item.img}" class="w-full h-full object-cover" alt="${item.title}" onerror="this.src='https://via.placeholder.com/400x600?text=Reference'">
                         </div>
@@ -459,7 +493,7 @@
                             </div>
                             <div class="flex items-center gap-3">
                                 <span class="mono text-[9px] px-2 py-0.5 border border-stone-200 text-stone-400 rounded-full">Ref. ${index + 1}</span>
-                                ${index >= base.length ? '<span class="mono text-[8px] px-2 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-100">Custom Entry</span>' : ''}
+                                ${isCustom ? '<span class="mono text-[8px] px-2 py-0.5 bg-stone-50 text-stone-500 rounded-full border border-stone-100">Custom Entry</span>' : ''}
                             </div>
                         </div>
                     </div>
@@ -479,6 +513,9 @@
                 
                 const textarea = entry.querySelector('.note-textarea');
                 textarea.addEventListener('input', (e) => handleNoteInput(item.title, e.target.value));
+
+                const deleteBtn = entry.querySelector('.delete-btn');
+                deleteBtn.onclick = () => window.deleteEntry(item.title, isCustom);
                 
                 grid.appendChild(entry);
             });
