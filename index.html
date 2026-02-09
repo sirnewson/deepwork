@@ -190,7 +190,7 @@
 
         <!-- Footer -->
         <footer class="mt-32 pt-12 border-t border-stone-200 flex flex-col md:flex-row justify-between items-center gap-6 mono text-[10px] text-stone-400 uppercase tracking-widest pb-12">
-            <div>The High-Bandwidth Archive // Cloud Persistence v6</div>
+            <div>The High-Bandwidth Archive // Cloud Persistence v6.1</div>
             <div id="user-id">ID: ---</div>
             <div class="italic">Encrypted Session // Permanent Index</div>
         </footer>
@@ -199,9 +199,9 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Your specific Firebase configuration for Standalone Deployment (Vercel)
+        // Hardcoded Configuration for Vercel/Standalone Compatibility
         const firebaseConfig = {
             apiKey: "AIzaSyDhZPlDPcM_3nbrNDKBbK8gUxJ2b9xwBog",
             authDomain: "deepwork-9ce83.firebaseapp.com",
@@ -212,30 +212,30 @@
             measurementId: "G-P9FS2D5C4L"
         };
 
-        // If running in internal preview, try to use environment config
-        let finalConfig = firebaseConfig;
-        if (typeof window.__firebase_config !== 'undefined') {
-            try {
-                finalConfig = JSON.parse(window.__firebase_config);
-            } catch(e) {}
-        }
-
-        const app = initializeApp(finalConfig);
+        const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         
-        // App ID logic
-        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'bandwidth-library-archive';
+        const appId = (typeof window.__app_id !== 'undefined' && window.__app_id) ? window.__app_id : 'bandwidth-library-archive';
+        const storageKey = `archive_local_cache_${appId}`;
 
         let currentUser = null;
         let userData = {
             notes: {},
             customMovies: [],
-            customBooks: []
+            customBooks: [],
+            lastUpdate: 0
         };
         let activeType = 'movies';
 
-        // Core Dataset
+        // Load local cache immediately for ultra-smooth experience
+        const cachedData = localStorage.getItem(storageKey);
+        if (cachedData) {
+            try {
+                userData = JSON.parse(cachedData);
+            } catch(e) { console.error("Cache corrupted"); }
+        }
+
         const baseLibraryData = {
             movies: [
                 { title: "Whiplash", img: "https://upload.wikimedia.org/wikipedia/en/0/01/Whiplash_poster.jpg", theme: "Identity, Drive, Inner Conflict" },
@@ -307,17 +307,21 @@
 
         // Initialize App
         async function init() {
-            // Auth Flow
-            try {
-                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                    await signInWithCustomToken(auth, window.__initial_auth_token);
-                } else {
+            // Auth Flow - Rule 3 Compliant: Await Auth First
+            const initAuth = async () => {
+                try {
+                    if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                        await signInWithCustomToken(auth, window.__initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (err) {
+                    console.warn("Primary auth failed, falling back to anonymous session:", err);
                     await signInAnonymously(auth);
                 }
-            } catch (err) {
-                console.error("Auth initiation failed", err);
-                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i> OFFLINE';
-            }
+            };
+
+            await initAuth();
 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
@@ -329,8 +333,8 @@
 
             updateClock();
             setInterval(updateClock, 1000);
+            renderArchive();
 
-            // Manual Entry Submission
             document.getElementById('entry-form').onsubmit = async (e) => {
                 e.preventDefault();
                 const type = document.getElementById('new-type').value;
@@ -340,58 +344,76 @@
                     img: document.getElementById('new-img').value || 'https://via.placeholder.com/400x600?text=Reference'
                 };
 
+                userData.lastUpdate = Date.now();
                 if (type === 'movies') userData.customMovies.push(newItem);
                 else userData.customBooks.push(newItem);
 
+                saveLocal();
+                renderArchive();
                 await syncToVault();
                 toggleModal(false);
-                renderArchive();
             };
         }
 
-        // Firestore Listener
+        // Firestore Listener - Follows Mandatory Rule 1 (Path Structure)
         function setupDataListener(uid) {
             if (!uid) return;
-            const userDoc = doc(db, 'artifacts', appId, 'users', uid, 'data', 'library_state');
+            // RULE 1 COMPLIANT PATH: 6 segments for document access
+            const userDoc = doc(db, 'artifacts', appId, 'users', uid, 'vault', 'state');
             
             onSnapshot(userDoc, (snapshot) => {
                 if (snapshot.exists()) {
-                    userData = snapshot.data();
-                    // Ensure arrays exist
-                    if (!userData.notes) userData.notes = {};
-                    if (!userData.customMovies) userData.customMovies = [];
-                    if (!userData.customBooks) userData.customBooks = [];
-                } else {
-                    // Initialize empty vault
-                    userData = { notes: {}, customMovies: [], customBooks: [] };
+                    const serverData = snapshot.data();
+                    
+                    // Conflict Resolution: Only update if server has strictly newer information
+                    // AND we haven't made a local change in the last 2.5 seconds (to avoid jumping while typing)
+                    const now = Date.now();
+                    const isDrafting = (now - userData.lastUpdate) < 2500;
+                    
+                    if (serverData.lastUpdate > userData.lastUpdate && !isDrafting) {
+                        userData = {
+                            ...userData,
+                            ...serverData,
+                            notes: { ...userData.notes, ...serverData.notes },
+                            customMovies: serverData.customMovies || userData.customMovies,
+                            customBooks: serverData.customBooks || userData.customBooks,
+                            lastUpdate: serverData.lastUpdate
+                        };
+                        saveLocal();
+                        renderArchive();
+                        updateStats();
+                    }
                 }
-                
-                renderArchive();
-                updateStats();
                 document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-cloud-check text-green-500"></i> <span>VAULT SYNCED</span>';
             }, (err) => {
-                console.error("Snapshot error:", err);
-                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-orange-400"></i> SYNC ERROR';
+                console.error("Snapshot error (Check Security Rules):", err);
+                // If permission denied, the app remains functional in Local Cache mode
+                document.getElementById('sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-orange-400"></i> LOCAL ONLY';
             });
         }
 
-        // Persistence Logic
+        function saveLocal() {
+            localStorage.setItem(storageKey, JSON.stringify(userData));
+        }
+
         async function syncToVault() {
+            // Guard: Rule 3
             if (!currentUser) return;
             try {
-                const userDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'library_state');
+                const userDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'vault', 'state');
                 await setDoc(userDoc, userData, { merge: true });
                 updateStats();
             } catch (err) {
-                console.error("Critical Sync Failure:", err);
+                console.error("Cloud Sync Error:", err);
             }
         }
 
-        // Smooth Note Handling
+        // Optimized Smooth Note Handling
         let debounceTimeout;
-        window.updateNote = (title, value) => {
-            // Immediate local update for "smoothness"
+        function handleNoteInput(title, value) {
             userData.notes[title] = value;
+            userData.lastUpdate = Date.now();
+            saveLocal();
             
             const statusEl = document.getElementById('sync-status');
             statusEl.innerHTML = '<i class="fa-solid fa-rotate fa-spin text-stone-300"></i> <span class="sync-pulse">DRAFTING...</span>';
@@ -400,20 +422,21 @@
             debounceTimeout = setTimeout(async () => {
                 await syncToVault();
                 statusEl.innerHTML = '<i class="fa-solid fa-cloud-check text-green-500"></i> <span>VAULT SYNCED</span>';
-            }, 1000);
-        };
+            }, 1200);
+        }
 
-        // UI Rendering
+        // UI Rendering with event binding
         function renderArchive() {
             const grid = document.getElementById('archive-grid');
+            if (!grid) return;
             grid.innerHTML = '';
             
             const base = baseLibraryData[activeType];
-            const custom = activeType === 'movies' ? userData.customMovies : userData.customBooks;
+            const custom = activeType === 'movies' ? (userData.customMovies || []) : (userData.customBooks || []);
             const fullList = [...base, ...custom];
             
             if (fullList.length === 0) {
-                grid.innerHTML = `<div class="col-span-full py-20 text-center mono text-stone-200 uppercase tracking-widest">No entries found in this category</div>`;
+                grid.innerHTML = `<div class="col-span-full py-20 text-center mono text-stone-200 uppercase tracking-widest">No entries found</div>`;
                 return;
             }
 
@@ -447,13 +470,16 @@
                             <i class="fa-solid fa-feather-pointed text-[10px] text-stone-200"></i>
                         </div>
                         <textarea 
-                            class="text-lg text-stone-600 placeholder:text-stone-100"
+                            class="text-lg text-stone-600 placeholder:text-stone-100 note-textarea"
                             placeholder="Distill observations for this entry..."
-                            oninput="updateNote('${item.title.replace(/'/g, "\\'")}', this.value)"
                             rows="5"
                         >${currentNote}</textarea>
                     </div>
                 `;
+                
+                const textarea = entry.querySelector('.note-textarea');
+                textarea.addEventListener('input', (e) => handleNoteInput(item.title, e.target.value));
+                
                 grid.appendChild(entry);
             });
 
@@ -461,13 +487,15 @@
         }
 
         function updateStats() {
-            const count = Object.values(userData.notes).filter(v => v && v.trim().length > 0).length;
-            document.getElementById('stat-count').textContent = count;
+            const count = Object.values(userData.notes || {}).filter(v => v && v.trim().length > 0).length;
+            const countEl = document.getElementById('stat-count');
+            if (countEl) countEl.textContent = count;
         }
 
         function updateClock() {
             const now = new Date();
-            document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+            const clockEl = document.getElementById('clock');
+            if (clockEl) clockEl.textContent = now.toTimeString().split(' ')[0];
         }
 
         init();
